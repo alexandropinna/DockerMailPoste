@@ -1,0 +1,84 @@
+version: '3'
+services:
+
+  posteio:
+    image: analogic/poste.io:2.2.26
+    container_name: ${NAME}
+    hostname: mail.${DOMAIN}
+    restart: always
+    env_file: .env
+    environment:
+      - HOSTNAME=mail.${DOMAIN}
+      - HTTPS=OFF
+      - DISABLE_CLAMAV=TRUE
+      - DISABLE_RSPAMD=TRUE
+      - LETSENCRYPT_EMAIL=postmaster@${DOMAIN}
+      - LETSENCRYPT_HOST=${DOMAIN}
+      - VIRTUAL_HOST=mail.${DOMAIN}
+    volumes:
+      - '${RUTA}/poste-${NAME}/data:/data'
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.80'
+          memory: 1024M
+    labels:
+      - "traefik.http.routers.${NAME}-webmail.rule=Host(`webmail.${DOMAIN}`)"
+      - "traefik.http.routers.${NAME}-webmail.entrypoints=https"
+      - "traefik.http.routers.${NAME}-webmail.tls.certresolver=mydnschallenge"
+      - "traefik.http.routers.${NAME}-webmail.service=${NAME}-webmail"
+      - "traefik.http.services.${NAME}-webmail.loadbalancer.server.port=80"
+        # PUERTO 25 SMTP 
+      - "traefik.tcp.routers.smtp-${NAME}.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.smtp-${NAME}.entrypoints=smtp"
+      - "traefik.tcp.routers.smtp-${NAME}.service=smtp-${NAME}"
+      - "traefik.tcp.services.smtp-${NAME}.loadbalancer.server.port=25"
+
+        # PUERTO 110 POP3
+      - "traefik.tcp.routers.pop3-${NAME}.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.pop3-${NAME}.entrypoints=pop3"
+      - "traefik.tcp.routers.pop3-${NAME}.service=pop3-${NAME}"
+      - "traefik.tcp.services.pop3-${NAME}.loadbalancer.server.port=110"
+
+        # PUERTO 143 IMAP
+      - "traefik.tcp.routers.imap-${NAME}.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.imap-${NAME}.entrypoints=imap"
+      - "traefik.tcp.routers.imap-${NAME}.service=imap-${NAME}"
+      - "traefik.tcp.services.imap-${NAME}.loadbalancer.server.port=143"
+
+        # PUERTO 587 MSA
+      - "traefik.tcp.routers.msa-${NAME}.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.msa-${NAME}.entrypoints=msa"
+      - "traefik.tcp.routers.msa-${NAME}.service=msa-${NAME}"
+      - "traefik.tcp.services.msa-${NAME}.loadbalancer.server.port=587"
+
+        # PUERTO 993 IMAPS
+      - "traefik.tcp.routers.imaps-${NAME}.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.imaps-${NAME}.entrypoints=imaps"
+      - "traefik.tcp.routers.imaps-${NAME}.tls.passthrough=true"
+      - "traefik.tcp.routers.imaps-${NAME}.service=imaps-${NAME}"
+      - "traefik.tcp.services.imaps-${NAME}.loadbalancer.server.port=993"
+
+        # POSTEIO ADMIN
+      - "traefik.http.routers.${NAME}-posteio.rule=Host(`posteio.${DOMAIN}`)"
+      - "traefik.http.routers.${NAME}-posteio.entrypoints=https"
+      - "traefik.http.middlewares.${NAME}-posteio-redirect.redirectregex.regex=posteio.${DOMAIN}/webmail"
+      - "traefik.http.middlewares.${NAME}-posteio-redirect.redirectregex.replacement=posteio.${DOMAIN}/admin"
+      - "traefik.http.routers.${NAME}-posteio.middlewares=${NAME}-posteio-redirect@docker"
+      - "traefik.http.routers.${NAME}-posteio.tls.certresolver=mydnschallenge"
+      - "traefik.http.routers.${NAME}-posteio.service=${NAME}-posteio"
+      - "traefik.http.services.${NAME}-posteio.loadbalancer.server.port=80"
+      - "traefik.http.routers.${NAME}-posteio-letsencrypt.rule=HostRegexp(`${DOMAIN}`,`{subdomain:[a-z]*}.${DOMAIN}`) && PathPrefix(`/.well-known/`)"
+      - "traefik.http.routers.${NAME}-posteio-letsencrypt.entrypoints=https"
+      - "traefik.http.routers.${NAME}-posteio-letsencrypt.service=${NAME}-webmail"
+      - "traefik.http.services.posteio-letsencrypt.loadbalancer.server.port=80"
+    networks:
+      - traefik_net
+
+        
+networks:
+  traefik_net:
+    external: true
+
